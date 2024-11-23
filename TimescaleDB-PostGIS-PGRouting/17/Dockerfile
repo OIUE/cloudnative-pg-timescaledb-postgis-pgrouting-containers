@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-FROM postgis/postgis:15-3.5
+FROM oiue/postgis:17-3.5
 
 # Do not split the description, otherwise we will see a blank space in the labels
-LABEL name="PostgreSQL + TimescaleDB + PostGIS Container Images" \
+LABEL name="PostgreSQL + TimescaleDB + PostGIS + PGRouting Container Images" \
 	version="${PG_VERSION}" \
-	release="8" \
-	summary="PostgreSQL + TimescaleDB + PostGIS Container images." \
-	description="This Docker image contains PostgreSQL, TimescaleDB, PostGIS and Barman Cloud based on Postgres 15-3.5."
+	release="17" \
+	summary="PostgreSQL + TimescaleDB + PostGIS + PGRouting Container images." \
+	description="This Docker image contains PostgreSQL, TimescaleDB, PostGIS, PGRouting and Barman Cloud based on Postgres 17-3.5."
 
 COPY requirements.txt /
 
@@ -61,5 +61,23 @@ RUN set -xe; \
 	rm -rf /var/lib/apt/lists/*;
 
 # Change the uid of postgres to 26
-RUN usermod -u 26 postgres
-USER 26
+#RUN usermod -u 26 postgres
+#USER 26
+
+#timescaledb
+# add timescaledb to default PostgreSQL config
+RUN echo "shared_preload_libraries = 'timescaledb'" >> /var/lib/postgresql/postgresql.conf.sample
+
+# add health check script
+COPY pg_healthcheck wait-for-manager.sh /
+RUN chmod +x /wait-for-manager.sh
+
+# entry point unsets PGPASSWORD, but we need it to connect to workers
+# https://github.com/docker-library/postgres/blob/33bccfcaddd0679f55ee1028c012d26cd196537d/12/docker-entrypoint.sh#L303
+RUN sed "/unset PGPASSWORD/d" -i /usr/local/bin/docker-entrypoint.sh
+
+HEALTHCHECK --interval=4s --start-period=6s CMD ./pg_healthcheck
+
+VOLUME ["/home/nginxWebUI"]
+EXPOSE 5432
+RUN rm /docker-entrypoint-initdb.d/10_postgis.sh
